@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">BudTracker</string>
+    <string name="title_activity_main">BudTracker</string>
+    <string name="package_name">com.vasanth.budtracker</string>
+    <string name="custom_url_scheme">com.vasanth.budtracker</string>
+</resources>

@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>BudTracker Pro</title>
+    
+    <!-- Leaflet CSS for the Map -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+    <style>
+        /* Reset and Base Styles */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            background-color: #f4f7f6;
+            color: #333;
+            display: flex;
+            justify-content: center;
+        }
+
+        /* Mobile App Container */
+        .app-container {
+            width: 100%;
+            max-width: 480px; 
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            background-color: #ffffff;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+            position: relative;
+        }
+
+        /* Header */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px;
+            background-color: #ffffff;
+            z-index: 10;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            color: #1a1a1a;
+        }
+
+        .status-indicator {
+            font-size: 0.8rem;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-weight: 600;
+            background-color: #f5f5f5;
+            color: #616161;
+        }
+
+        /* Map Area */
+        #map {
+            flex-grow: 1;
+            width: 100%;
+            background-color: #e0e0e0;
+            z-index: 1;
+        }
+
+        /* Bottom Info Card */
+        .info-card {
+            background-color: #ffffff;
+            border-radius: 24px 24px 0 0;
+            padding: 24px;
+            box-shadow: 0 -4px 20px rgba(0,0,0,0.08);
+            position: relative;
+            z-index: 10;
+            margin-top: -20px; 
+        }
+
+        .info-card h2 {
+            font-size: 1.4rem;
+            margin-bottom: 5px;
+        }
+
+        .timestamp {
+            color: #757575;
+            font-size: 0.9rem;
+            margin-bottom: 20px;
+        }
+
+        /* Coordinates Layout */
+        .coordinates {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+
+        .coord-box {
+            flex: 1;
+            background-color: #f8f9fa;
+            padding: 12px;
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .coord-box .label {
+            font-size: 0.7rem;
+            color: #9e9e9e;
+            letter-spacing: 1px;
+            margin-bottom: 4px;
+        }
+
+        .coord-box .value {
+            font-weight: 600;
+            color: #212529;
+        }
+
+        /* Buttons */
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 12px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.1s, opacity 0.2s;
+        }
+
+        .btn:active {
+            transform: scale(0.97);
+        }
+
+        .btn.primary {
+            background-color: #007aff;
+            color: white;
+        }
+
+        .btn.secondary {
+            background-color: #e0e0e0;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header>
+            <h1>BudTracker</h1>
+            <div class="status-indicator" id="bt-status">Disconnected</div>
+        </header>
+
+        <!-- Map Container -->
+        <div id="map"></div>
+
+        <!-- Device Info Card -->
+        <div class="info-card">
+            <h2 id="device-name">No Device Selected</h2>
+            <p class="timestamp" id="timestamp">Tap 'Pair Buds' to begin tracking.</p>
+            
+            <div class="coordinates">
+                <div class="coord-box">
+                    <span class="label">LATITUDE</span>
+                    <span class="value" id="lat-val">--</span>
+                </div>
+                <div class="coord-box">
+                    <span class="label">LONGITUDE</span>
+                    <span class="value" id="lon-val">--</span>
+                </div>
+            </div>
+
+            <div class="action-buttons">
+                <button id="btn-connect" class="btn secondary">Pair Buds</button>
+                <button id="btn-refresh" class="btn secondary">Get GPS</button>
+                <button id="btn-navigate" class="btn primary">Navigate</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Leaflet JS for Maps -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <script>
+        // Initialize the map (using Leaflet.js)
+        const map = L.map('map').setView([0, 0], 2);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        let marker;
+
+        // DOM Elements
+        const deviceNameEl = document.getElementById('device-name');
+        const timestampEl = document.getElementById('timestamp');
+        const latValEl = document.getElementById('lat-val');
+        const lonValEl = document.getElementById('lon-val');
+        const btnRefresh = document.getElementById('btn-refresh');
+        const btnNavigate = document.getElementById('btn-navigate');
+        const btnConnect = document.getElementById('btn-connect');
+        const statusIndicator = document.getElementById('bt-status');
+
+        // 1. REAL BLUETOOTH API
+        btnConnect.addEventListener('click', async () => {
+            try {
+                statusIndicator.innerText = "Scanning...";
+                statusIndicator.style.backgroundColor = "#fff3e0"; 
+                statusIndicator.style.color = "#e65100";
+
+                // Request Bluetooth Device 
+                const device = await navigator.bluetooth.requestDevice({
+                    acceptAllDevices: true
+                });
+
+                deviceNameEl.innerText = device.name || "Unnamed Earbuds";
+                statusIndicator.innerText = "Connected";
+                statusIndicator.style.backgroundColor = "#e8f5e9";
+                statusIndicator.style.color = "#2e7d32";
+                
+                // Once connected, grab the GPS location
+                getRealLocation();
+
+            } catch (error) {
+                console.error("Bluetooth error:", error);
+                statusIndicator.innerText = "Connection Failed";
+                statusIndicator.style.backgroundColor = "#ffebee";
+                statusIndicator.style.color = "#c62828";
+            }
+        });
+
+        // 2. REAL GPS LOCATION API
+        function getRealLocation() {
+            btnRefresh.innerText = "Locating...";
+
+            if (!navigator.geolocation) {
+                alert("Geolocation is not supported by your browser.");
+                btnRefresh.innerText = "Get GPS";
+                return;
+            }
+
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const lat = position.coords.latitude;
+                    const lon = position.coords.longitude;
+                    
+                    // Update UI text
+                    latValEl.innerText = lat.toFixed(5);
+                    lonValEl.innerText = lon.toFixed(5);
+                    
+                    const date = new Date();
+                    timestampEl.innerText = `Last seen: ${date.toLocaleTimeString()}`;
+
+                    // Update Map
+                    const coords = [lat, lon];
+                    if (marker) {
+                        marker.setLatLng(coords);
+                    } else {
+                        marker = L.marker(coords).addTo(map);
+                    }
+                    map.setView(coords, 16);
+                    
+                    btnRefresh.innerText = "Get GPS";
+                },
+                (error) => {
+                    console.error("GPS error:", error);
+                    alert("Unable to retrieve your location. Please check browser permissions.");
+                    btnRefresh.innerText = "Get GPS";
+                },
+                { enableHighAccuracy: true } 
+            );
+        }
+
+        // Button Listeners
+        btnRefresh.addEventListener('click', getRealLocation);
+
+        btnNavigate.addEventListener('click', () => {
+            const lat = latValEl.innerText;
+            const lon = lonValEl.innerText;
+            
+            if (lat === "--" || lon === "--") {
+                alert("No location data available yet!");
+                return;
+            }
+            
+            window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}`, '_blank');
+        });
+    </script>
+</body>
+</html>
